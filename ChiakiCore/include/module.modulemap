@@ -1,0 +1,4 @@
+module ChiakiCore {
+	umbrella header "ChiakiCore.h"
+	export *
+}

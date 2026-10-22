@@ -1,0 +1,5 @@
+// 공용 설정. 개인 서명 정보는 Local.xcconfig에 둔다 (git에 안 올라감).
+BUNDLE_ID_PREFIX = com.example
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

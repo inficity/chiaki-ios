@@ -1,0 +1,49 @@
+// Swift에서 `import ChiakiCore`로 쓰는 umbrella 헤더
+#pragma once
+
+#include <netinet/in.h> // holepunch.h가 INET6_ADDRSTRLEN을 쓰지만 직접 include하지 않음
+
+#include <chiaki/audio.h>
+#include <chiaki/audioreceiver.h>
+#include <chiaki/audiosender.h>
+#include <chiaki/base64.h>
+#include <chiaki/bitstream.h>
+#include <chiaki/common.h>
+#include <chiaki/config.h>
+#include <chiaki/congestioncontrol.h>
+#include <chiaki/controller.h>
+#include <chiaki/ctrl.h>
+#include <chiaki/discovery.h>
+#include <chiaki/discoveryservice.h>
+#include <chiaki/ecdh.h>
+#include <chiaki/fec.h>
+#include <chiaki/feedback.h>
+#include <chiaki/feedbacksender.h>
+#include <chiaki/frameprocessor.h>
+#include <chiaki/gkcrypt.h>
+#include <chiaki/http.h>
+#include <chiaki/launchspec.h>
+#include <chiaki/log.h>
+#include <chiaki/opusdecoder.h>
+#include <chiaki/opusencoder.h>
+#include <chiaki/orientation.h>
+#include <chiaki/packetstats.h>
+#include <chiaki/random.h>
+#include <chiaki/regist.h>
+#include <chiaki/remote/holepunch.h>
+#include <chiaki/remote/rudp.h>
+#include <chiaki/remote/rudpsendbuffer.h>
+#include <chiaki/reorderqueue.h>
+#include <chiaki/rpcrypt.h>
+#include <chiaki/senkusha.h>
+#include <chiaki/seqnum.h>
+#include <chiaki/session.h>
+#include <chiaki/sock.h>
+#include <chiaki/stoppipe.h>
+#include <chiaki/streamconnection.h>
+#include <chiaki/takion.h>
+#include <chiaki/takionsendbuffer.h>
+#include <chiaki/thread.h>
+#include <chiaki/time.h>
+#include <chiaki/video.h>
+#include <chiaki/videoreceiver.h>
