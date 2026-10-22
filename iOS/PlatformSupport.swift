@@ -29,6 +29,11 @@ extension ToolbarItemPlacement {
 	static var platformLeading: ToolbarItemPlacement { .topBarLeading }
 }
 
+enum PlatformFeatures {
+	/// 컨트롤러가 없을 때 화면 터치 패드를 띄운다 (iOS/TouchControls.swift)
+	static let touchControls = true
+}
+
 enum IdleSleep {
 	static func prevent(_ enabled: Bool) {
 		UIApplication.shared.isIdleTimerDisabled = enabled

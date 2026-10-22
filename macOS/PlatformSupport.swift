@@ -28,6 +28,17 @@ extension ToolbarItemPlacement {
 	static var platformLeading: ToolbarItemPlacement { .navigation }
 }
 
+enum PlatformFeatures {
+	/// 맥은 키보드와 패드로 조작한다
+	static let touchControls = false
+}
+
+/// 맥에는 화면 터치 패드가 없다 (iOS/TouchControls.swift와 같은 이름)
+struct TouchControlsView: View {
+	init(session: StreamSession) {}
+	var body: some View { EmptyView() }
+}
+
 enum IdleSleep {
 	private static var activity: NSObjectProtocol?
 

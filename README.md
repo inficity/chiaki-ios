@@ -25,6 +25,8 @@ open ChiakiRemote.xcodeproj
 - `scripts/build-chiaki.sh` — 위를 합쳐 `build/ChiakiCore.xcframework` 생성
 - `Shared/` — 두 앱이 같이 쓰는 SwiftUI 코드 (`import ChiakiCore`)
 - `iOS/`, `macOS/` — 플랫폼별 구현 (`PlatformSupport.swift`에 같은 이름의 API를 맞춘다)
+- `Design/icon-candidates/` — 앱 아이콘 후보 원본. 바꾸려면
+  `swift scripts/make-app-icon.swift Design/icon-candidates/icon-b.png Shared/Assets.xcassets/AppIcon.appiconset`
 
 ## 데이터와 iCloud 동기화
 

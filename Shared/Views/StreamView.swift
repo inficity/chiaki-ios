@@ -1,3 +1,4 @@
+import GameController
 import SwiftUI
 
 struct StreamView: View {
@@ -8,6 +9,8 @@ struct StreamView: View {
 	@State private var showsControls = true
 	@State private var hideTask: Task<Void, Never>?
 	@State private var loginPIN = ""
+	/// 화면 터치 패드: 처음엔 연결된 컨트롤러가 없을 때만 보인다
+	@State private var showsTouchControls = PlatformFeatures.touchControls && GCController.controllers().isEmpty
 
 	var body: some View {
 		ZStack {
@@ -16,11 +19,20 @@ struct StreamView: View {
 				.ignoresSafeArea()
 				.contentShape(Rectangle())
 				.onTapGesture { revealControls() }
+			if session.state == .streaming && showsTouchControls {
+				TouchControlsView(session: session)
+			}
 			overlay
 		}
 		.overlay(alignment: .topTrailing) {
 			if showsControls {
 				HStack(spacing: 12) {
+					if PlatformFeatures.touchControls && session.state == .streaming {
+						controlButton(showsTouchControls ? "gamecontroller.fill" : "gamecontroller") {
+							showsTouchControls.toggle()
+							revealControls()
+						}
+					}
 					if session.state == .streaming {
 						// macOS가 패드의 PS 버튼을 가져갈 때를 위한 대체 버튼
 						controlButton("playstation.logo") {
@@ -66,6 +78,13 @@ struct StreamView: View {
 		}
 		.onChange(of: session.state) { _, state in
 			if case .ended(message: nil) = state { onClose() }
+		}
+		// 패드를 연결하면 터치 패드를 숨기고, 다 끊기면 다시 띄운다
+		.onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+			if PlatformFeatures.touchControls { showsTouchControls = false }
+		}
+		.onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in
+			if PlatformFeatures.touchControls && GCController.controllers().isEmpty { showsTouchControls = true }
 		}
 	}
 

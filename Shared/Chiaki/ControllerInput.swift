@@ -2,7 +2,16 @@ import ChiakiCore
 import GameController
 import os
 
-/// 게임패드(DualSense/DualShock 4/MFi)와 키보드 입력을 합쳐 ChiakiControllerState로 넘긴다.
+/// 실제 패드·키보드가 아닌 입력 소스. 각자 상태를 넣으면 실제 입력과 합쳐서 PS5로 간다.
+enum VirtualInputSource: Hashable {
+	/// 화면 터치 패드
+	case touch
+	/// 에이전트(MCP) 조작
+	case agent
+}
+
+/// 게임패드(DualSense/DualShock 4/MFi), 키보드, 가상 입력(터치·에이전트)을 합쳐 ChiakiControllerState로 넘긴다.
+/// 버튼은 OR, 트리거는 큰 값, 스틱은 절댓값이 큰 쪽이 이긴다 (chiaki_controller_state_or).
 final class ControllerInput {
 	var onChange: ((ChiakiControllerState) -> Void)?
 
@@ -14,11 +23,17 @@ final class ControllerInput {
 	private var pressedKeys: Set<GCKeyCode> = []
 	private var homePressed = false
 	private var tappedButtons: UInt32 = 0
+	private var virtualStates: [VirtualInputSource: ChiakiControllerState] = [:]
 	private static let log = Logger(subsystem: "ChiakiRemote", category: "input")
 
 	// PS5 터치패드 좌표 범위
 	private static let touchpadWidth: Float = 1919
 	private static let touchpadHeight: Float = 1079
+
+	init() {
+		// 0으로 채운 상태는 터치 id 0(손가락이 (0,0)에 닿음)이라 idle(-1)로 시작해야 한다
+		chiaki_controller_state_set_idle(&padState)
+	}
 
 	func start() {
 		chiaki_controller_state_set_idle(&padState)
@@ -46,11 +61,27 @@ final class ControllerInput {
 	}
 
 	private func publish() {
+		onChange?(mergedState())
+	}
+
+	/// 지금 PS5로 보낼 합쳐진 상태
+	func mergedState() -> ChiakiControllerState {
 		var keys = keyboardState()
 		var out = ChiakiControllerState()
 		chiaki_controller_state_or(&out, &padState, &keys)
+		for var state in virtualStates.values {
+			var merged = ChiakiControllerState()
+			chiaki_controller_state_or(&merged, &out, &state)
+			out = merged
+		}
 		out.buttons |= tappedButtons
-		onChange?(out)
+		return out
+	}
+
+	/// 가상 입력 소스의 상태를 바꾼다. nil이면 그 소스를 뺀다.
+	func set(_ state: ChiakiControllerState?, for source: VirtualInputSource) {
+		virtualStates[source] = state
+		publish()
 	}
 
 	/// 화면 버튼 등에서 버튼을 잠깐 눌렀다 뗀다

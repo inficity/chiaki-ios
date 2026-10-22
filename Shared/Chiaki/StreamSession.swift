@@ -104,6 +104,11 @@ final class StreamSession: Identifiable {
 		}
 	}
 
+	/// 가상 입력(화면 터치 패드, 에이전트). 실제 패드·키보드 입력과 합쳐서 보낸다.
+	func setVirtualInput(_ state: ChiakiControllerState?, from source: VirtualInputSource) {
+		input.set(state, for: source)
+	}
+
 	/// 화면의 PS 버튼. macOS가 패드의 PS 버튼을 가져갈 때 대신 쓴다.
 	func pressPS() {
 		input.tap(CHIAKI_CONTROLLER_BUTTON_PS)
