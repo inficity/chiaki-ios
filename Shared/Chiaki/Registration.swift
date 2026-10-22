@@ -19,6 +19,15 @@ struct RegisteredConsole: Codable, Equatable {
 		mac = withUnsafeBytes(of: host.server_mac) { Data($0) }
 	}
 
+	/// chiaki-ng 설정에서 가져온 등록 (같은 값이라 PIN 등록을 다시 할 필요가 없다)
+	init(imported console: ChiakiConfig.Console) {
+		target = console.target
+		registKey = console.registKey
+		morning = console.morning
+		nickname = console.nickname
+		mac = console.mac
+	}
+
 	/// 원격 켜기 패킷에 넣는 값: regist key를 16진수 문자열로 읽은 것
 	var wakeCredential: UInt64? {
 		let key = registKey.prefix { $0 != 0 }

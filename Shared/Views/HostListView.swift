@@ -5,6 +5,8 @@ struct HostListView: View {
 	@Environment(AppSettings.self) private var settings
 	@Environment(\.scenePhase) private var scenePhase
 	@State private var showingAdd = false
+	@State private var showingImporter = false
+	@State private var importing: ChiakiImportRequest?
 	@State private var showingSettings = false
 	@State private var registering: ConsoleHost?
 	@State private var streaming: StreamSession?
@@ -30,6 +32,7 @@ struct HostListView: View {
 						Text("Tailscale subnet router 너머의 PS5 LAN IP를 추가하세요.")
 					} actions: {
 						Button("PS5 추가") { showingAdd = true }
+						Button("chiaki-ng에서 가져오기") { showingImporter = true }
 					}
 				}
 			}
@@ -39,7 +42,12 @@ struct HostListView: View {
 					Button("설정", systemImage: "gearshape") { showingSettings = true }
 				}
 				ToolbarItem(placement: .primaryAction) {
-					Button("추가", systemImage: "plus") { showingAdd = true }
+					Menu {
+						Button("IP로 추가", systemImage: "plus") { showingAdd = true }
+						Button("chiaki-ng에서 가져오기…", systemImage: "square.and.arrow.down") { showingImporter = true }
+					} label: {
+						Label("추가", systemImage: "plus")
+					}
 				}
 #if os(macOS)
 				// 맥에는 당겨서 새로고침이 없다
@@ -60,6 +68,14 @@ struct HostListView: View {
 			}
 			.sheet(isPresented: $showingSettings) { SettingsView() }
 			.sheet(item: $registering) { RegisterView(host: $0) }
+			.sheet(item: $importing) { ImportView(request: $0) }
+			.fileImporter(isPresented: $showingImporter, allowedContentTypes: ChiakiImportRequest.contentTypes) { result in
+				do {
+					importing = try ChiakiImportRequest.load(result.get())
+				} catch {
+					errorMessage = error.localizedDescription
+				}
+			}
 			.streamPresenter(item: $streaming) { session in
 				StreamView(session: session) { streaming = nil }
 					.onDisappear { Task { await store.refreshAll() } }

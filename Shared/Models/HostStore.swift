@@ -104,6 +104,28 @@ final class HostStore {
 		}
 	}
 
+	/// chiaki-ng에서 가져온 콘솔을 목록에 넣고 등록 키를 저장한다.
+	/// 같은 콘솔(MAC)이 이미 있으면 등록만 바꾸고, 그 항목의 IP는 그대로 둔다.
+	@discardableResult
+	func importConsoles(_ consoles: [ChiakiConfig.Console]) -> [ConsoleHost] {
+		var imported: [ConsoleHost] = []
+		for console in consoles {
+			guard let address = console.address?.trimmingCharacters(in: .whitespaces), !address.isEmpty else { continue }
+			let host = hosts.first { registrations[$0.id]?.mac == console.mac }
+				?? hosts.first { $0.address == address }
+				?? {
+					let new = ConsoleHost(name: console.nickname, address: address)
+					hosts.append(new)
+					return new
+				}()
+			setRegistration(RegisteredConsole(imported: console), for: host)
+			imported.append(host)
+		}
+		save()
+		Task { await refreshAll() }
+		return imported
+	}
+
 	func refreshAll() async {
 		reloadRegistrations()
 		await withTaskGroup(of: Void.self) { group in
