@@ -11,10 +11,12 @@ final class AudioPlayer {
 	/// chiaki 오디오 스레드에서 스트림 형식이 정해지면 호출된다.
 	func configure(channels: Int, rate: Double) {
 		stop()
+#if os(iOS)
 		let session = AVAudioSession.sharedInstance()
 		try? session.setCategory(.playback, mode: .default)
 		try? session.setPreferredIOBufferDuration(0.005)
 		try? session.setActive(true)
+#endif
 
 		let ring = PCMRing(channels: channels, capacityFrames: Int(rate / 2),
 			targetFrames: Int(rate * 0.04), maxFrames: Int(rate * 0.1))

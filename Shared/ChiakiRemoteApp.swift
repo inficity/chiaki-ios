@@ -17,5 +17,8 @@ struct ChiakiRemoteApp: App {
 				.environment(store)
 				.environment(settings)
 		}
+#if os(macOS)
+		.defaultSize(width: 1280, height: 760)
+#endif
 	}
 }

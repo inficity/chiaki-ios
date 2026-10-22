@@ -34,12 +34,19 @@ struct HostListView: View {
 			}
 			.navigationTitle("Chiaki")
 			.toolbar {
-				ToolbarItem(placement: .topBarLeading) {
+				ToolbarItem(placement: .platformLeading) {
 					Button("설정", systemImage: "gearshape") { showingSettings = true }
 				}
 				ToolbarItem(placement: .primaryAction) {
 					Button("추가", systemImage: "plus") { showingAdd = true }
 				}
+#if os(macOS)
+				// 맥에는 당겨서 새로고침이 없다
+				ToolbarItem(placement: .primaryAction) {
+					Button("새로고침", systemImage: "arrow.clockwise") { Task { await store.refreshAll() } }
+						.keyboardShortcut("r")
+				}
+#endif
 			}
 			.refreshable { await store.refreshAll() }
 			.task { await store.refreshAll() }
@@ -48,8 +55,8 @@ struct HostListView: View {
 			}
 			.sheet(isPresented: $showingSettings) { SettingsView() }
 			.sheet(item: $registering) { RegisterView(host: $0) }
-			.fullScreenCover(item: $streaming) { session in
-				StreamView(session: session)
+			.streamPresenter(item: $streaming) { session in
+				StreamView(session: session) { streaming = nil }
 					.onDisappear { Task { await store.refreshAll() } }
 			}
 			.alert("접속할 수 없습니다", isPresented: Binding { errorMessage != nil } set: { if !$0 { errorMessage = nil } }) {

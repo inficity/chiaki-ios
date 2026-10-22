@@ -17,8 +17,7 @@ struct RegisterView: View {
 				Section {
 					TextField("예: AbCdEfGhIjk=", text: $accountID)
 						.font(.body.monospaced())
-						.textInputAutocapitalization(.never)
-						.autocorrectionDisabled()
+						.plainTextInput()
 				} header: {
 					Text("PSN 계정 ID")
 				} footer: {
@@ -28,7 +27,7 @@ struct RegisterView: View {
 				Section {
 					TextField("8자리 숫자", text: $pin)
 						.font(.body.monospaced())
-						.keyboardType(.numberPad)
+						.numberInput()
 				} header: {
 					Text("PIN")
 				} footer: {
@@ -43,7 +42,7 @@ struct RegisterView: View {
 				}
 			}
 			.navigationTitle("\(host.name) 등록")
-			.navigationBarTitleDisplayMode(.inline)
+			.inlineNavigationTitle()
 			.disabled(isRegistering)
 			.toolbar {
 				ToolbarItem(placement: .cancellationAction) {

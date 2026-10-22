@@ -2,6 +2,7 @@ name: ChiakiRemote
 options:
   deploymentTarget:
     iOS: "17.0"
+    macOS: "14.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/App.xcconfig
@@ -9,21 +10,27 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
 targets:
+  # iPhone / iPad
   ChiakiRemote:
     type: application
     platform: iOS
     sources:
-      - App
+      - Shared
+      - iOS
     dependencies:
       - framework: build/ChiakiCore.xcframework
         embed: false
     info:
-      path: App/Info.plist
+      path: iOS/Info.plist
       properties:
         CFBundleDisplayName: Chiaki
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         NSLocalNetworkUsageDescription: PS5에 접속하고 상태를 확인하려면 로컬 네트워크 접근이 필요합니다.
         GCSupportsControllerUserInteraction: true
@@ -42,6 +49,35 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).ChiakiRemote
         TARGETED_DEVICE_FAMILY: "1,2"
-        CODE_SIGN_STYLE: Automatic
         # ChiakiCore는 Apple Silicon 시뮬레이터(arm64)만 빌드한다
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
+  # Mac (Apple Silicon)
+  ChiakiRemoteMac:
+    type: application
+    platform: macOS
+    sources:
+      - Shared
+      - macOS
+    dependencies:
+      - framework: build/ChiakiCore.xcframework
+        embed: false
+      - sdk: CoreServices.framework # libchiaki takion.c가 macOS 버전 확인에 Gestalt를 쓴다
+    info:
+      path: macOS/Info.plist
+      properties:
+        CFBundleName: Chiaki
+        CFBundleDisplayName: Chiaki
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.games
+        NSLocalNetworkUsageDescription: PS5에 접속하고 상태를 확인하려면 로컬 네트워크 접근이 필요합니다.
+        GCSupportsControllerUserInteraction: true
+    settings:
+      base:
+        PRODUCT_NAME: Chiaki
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).ChiakiRemote
+        ARCHS: arm64
+        # 개인용 앱: 샌드박스 없이 UDP/TCP를 자유롭게 쓴다 (나중에 MCP 서버도 띄운다)
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO

@@ -18,15 +18,14 @@ struct AddHostView: View {
 				Section {
 					TextField("이름", text: $name)
 					TextField("IP 주소 (예: 192.168.0.20)", text: $address)
-						.keyboardType(.decimalPad)
-						.textInputAutocapitalization(.never)
-						.autocorrectionDisabled()
+						.decimalInput()
+						.plainTextInput()
 				} footer: {
 					Text("스팀덱 chiaki-ng에 수동으로 넣은 것과 같은 PS5 LAN IP를 입력하세요.")
 				}
 			}
 			.navigationTitle("PS5 추가")
-			.navigationBarTitleDisplayMode(.inline)
+			.inlineNavigationTitle()
 			.toolbar {
 				ToolbarItem(placement: .cancellationAction) {
 					Button("취소") { dismiss() }

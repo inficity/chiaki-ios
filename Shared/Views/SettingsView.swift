@@ -31,8 +31,7 @@ struct SettingsView: View {
 				Section {
 					TextField("base64", text: $settings.accountID)
 						.font(.body.monospaced())
-						.textInputAutocapitalization(.never)
-						.autocorrectionDisabled()
+						.plainTextInput()
 				} header: {
 					Text("PSN 계정 ID")
 				} footer: {
@@ -40,7 +39,7 @@ struct SettingsView: View {
 				}
 			}
 			.navigationTitle("설정")
-			.navigationBarTitleDisplayMode(.inline)
+			.inlineNavigationTitle()
 			.toolbar {
 				Button("완료") { dismiss() }
 			}

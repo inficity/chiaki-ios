@@ -1,10 +1,10 @@
-import AVFoundation
 import SwiftUI
 
 struct StreamView: View {
 	let session: StreamSession
+	/// 스트리밍 화면을 닫는다 (iOS 전체 화면 커버, 맥 창 오버레이 공통)
+	let onClose: () -> Void
 
-	@Environment(\.dismiss) private var dismiss
 	@State private var showsControls = true
 	@State private var hideTask: Task<Void, Never>?
 	@State private var loginPIN = ""
@@ -22,7 +22,7 @@ struct StreamView: View {
 			if showsControls {
 				Button {
 					session.stop()
-					dismiss()
+					onClose()
 				} label: {
 					Image(systemName: "xmark")
 						.font(.headline)
@@ -33,18 +33,17 @@ struct StreamView: View {
 				.transition(.opacity)
 			}
 		}
-		.statusBarHidden()
-		.persistentSystemOverlays(.hidden)
+		.immersiveStream()
 		.alert("PS5 로그인 암호", isPresented: loginPINBinding) {
 			SecureField("4자리", text: $loginPIN)
-				.keyboardType(.numberPad)
+				.numberInput()
 			Button("확인") {
 				session.submitLoginPIN(loginPIN)
 				loginPIN = ""
 			}
 			Button("취소", role: .cancel) {
 				session.stop()
-				dismiss()
+				onClose()
 			}
 		} message: {
 			if case .loginPIN(incorrect: true) = session.state {
@@ -52,16 +51,16 @@ struct StreamView: View {
 			}
 		}
 		.onAppear {
-			UIApplication.shared.isIdleTimerDisabled = true
+			IdleSleep.prevent(true)
 			session.start()
 			revealControls()
 		}
 		.onDisappear {
-			UIApplication.shared.isIdleTimerDisabled = false
+			IdleSleep.prevent(false)
 			session.stop()
 		}
 		.onChange(of: session.state) { _, state in
-			if case .ended(message: nil) = state { dismiss() }
+			if case .ended(message: nil) = state { onClose() }
 		}
 	}
 
@@ -84,7 +83,7 @@ struct StreamView: View {
 					.font(.callout)
 					.multilineTextAlignment(.center)
 					.foregroundStyle(.secondary)
-				Button("닫기") { dismiss() }
+				Button("닫기") { onClose() }
 					.buttonStyle(.borderedProminent)
 			}
 			.padding(24)
@@ -109,33 +108,6 @@ struct StreamView: View {
 			try? await Task.sleep(for: .seconds(3))
 			guard !Task.isCancelled else { return }
 			withAnimation { showsControls = false }
-		}
-	}
-}
-
-/// AVSampleBufferDisplayLayer를 SwiftUI에 붙인다
-private struct VideoLayerView: UIViewRepresentable {
-	let layer: AVSampleBufferDisplayLayer
-
-	func makeUIView(context: Context) -> LayerHostView {
-		let view = LayerHostView()
-		view.backgroundColor = .black
-		view.hosted = layer
-		view.layer.addSublayer(layer)
-		return view
-	}
-
-	func updateUIView(_ view: LayerHostView, context: Context) {}
-
-	final class LayerHostView: UIView {
-		var hosted: CALayer?
-
-		override func layoutSubviews() {
-			super.layoutSubviews()
-			CATransaction.begin()
-			CATransaction.setDisableActions(true)
-			hosted?.frame = bounds
-			CATransaction.commit()
 		}
 	}
 }
