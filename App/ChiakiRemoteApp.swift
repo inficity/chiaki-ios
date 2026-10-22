@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct ChiakiRemoteApp: App {
 	@State private var store = HostStore()
+	@State private var settings = AppSettings()
 
 	init() {
 		let err = chiaki_lib_init()
@@ -14,6 +15,7 @@ struct ChiakiRemoteApp: App {
 		WindowGroup {
 			HostListView()
 				.environment(store)
+				.environment(settings)
 		}
 	}
 }
