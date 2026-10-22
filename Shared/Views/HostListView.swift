@@ -3,6 +3,7 @@ import SwiftUI
 struct HostListView: View {
 	@Environment(HostStore.self) private var store
 	@Environment(AppSettings.self) private var settings
+	@Environment(\.scenePhase) private var scenePhase
 	@State private var showingAdd = false
 	@State private var showingSettings = false
 	@State private var registering: ConsoleHost?
@@ -50,6 +51,10 @@ struct HostListView: View {
 			}
 			.refreshable { await store.refreshAll() }
 			.task { await store.refreshAll() }
+			// 다른 기기에서 등록한 키가 iCloud 키체인으로 넘어왔을 수 있다
+			.onChange(of: scenePhase) { _, phase in
+				if phase == .active { Task { await store.refreshAll() } }
+			}
 			.sheet(isPresented: $showingAdd) {
 				AddHostView { store.add($0) }
 			}
@@ -88,6 +93,7 @@ struct HostListView: View {
 
 	/// 탭: 미등록이면 등록, 휴식 모드면 깨운 뒤 접속, 켜져 있으면 바로 접속
 	private func open(_ host: ConsoleHost) {
+		store.reloadRegistrations()
 		guard store.registrations[host.id] != nil else {
 			registering = host
 			return

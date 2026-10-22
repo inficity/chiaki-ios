@@ -37,23 +37,31 @@ struct StreamSettings: Codable, Equatable {
 
 @Observable
 final class AppSettings {
-	/// PSN 계정 ID (base64). 등록할 때만 쓴다.
-	var accountID: String { didSet { save() } }
-	var stream: StreamSettings { didSet { save() } }
+	/// PSN 계정 ID (base64). 등록할 때만 쓴다. iCloud로 다른 기기와 공유한다.
+	var accountID: String {
+		didSet { if accountID != oldValue { CloudSettings.set(accountID, forKey: Self.accountKey) } }
+	}
+	/// 영상 설정은 기기마다 다르게 쓰는 게 자연스러워서 (iPhone 720p, Mac 1080p 등) 공유하지 않는다
+	var stream: StreamSettings {
+		didSet { UserDefaults.standard.set(try? JSONEncoder().encode(stream), forKey: Self.streamKey) }
+	}
 
 	private static let accountKey = "psnAccountID"
 	private static let streamKey = "streamSettings"
+	@ObservationIgnored private var cloudObserver: NSObjectProtocol?
 
 	init() {
-		let defaults = UserDefaults.standard
-		accountID = defaults.string(forKey: Self.accountKey) ?? ""
-		stream = defaults.data(forKey: Self.streamKey)
+		CloudSettings.start()
+		accountID = CloudSettings.string(forKey: Self.accountKey) ?? ""
+		stream = UserDefaults.standard.data(forKey: Self.streamKey)
 			.flatMap { try? JSONDecoder().decode(StreamSettings.self, from: $0) } ?? StreamSettings()
-	}
-
-	private func save() {
-		let defaults = UserDefaults.standard
-		defaults.set(accountID, forKey: Self.accountKey)
-		defaults.set(try? JSONEncoder().encode(stream), forKey: Self.streamKey)
+		if CloudSettings.isMissingInCloud(Self.accountKey) && !accountID.isEmpty {
+			CloudSettings.set(accountID, forKey: Self.accountKey)
+		}
+		cloudObserver = CloudSettings.observe { [weak self] keys in
+			guard keys.contains(Self.accountKey), let self else { return }
+			let value = CloudSettings.string(forKey: Self.accountKey) ?? ""
+			if value != self.accountID { self.accountID = value }
+		}
 	}
 }

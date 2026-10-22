@@ -25,6 +25,14 @@ targets:
     dependencies:
       - framework: build/ChiakiCore.xcframework
         embed: false
+    entitlements:
+      path: iOS/ChiakiRemote.entitlements
+      properties: &cloud
+        # 등록 키(iCloud 키체인)와 PS5 목록(키-값 저장소)을 iPhone/iPad/Mac이 공유한다.
+        # 두 앱의 번들 ID가 같아서 같은 저장소를 쓴다.
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
     info:
       path: iOS/Info.plist
       properties:
@@ -63,6 +71,9 @@ targets:
       - framework: build/ChiakiCore.xcframework
         embed: false
       - sdk: CoreServices.framework # libchiaki takion.c가 macOS 버전 확인에 Gestalt를 쓴다
+    entitlements:
+      path: macOS/ChiakiRemote.entitlements
+      properties: *cloud
     info:
       path: macOS/Info.plist
       properties:

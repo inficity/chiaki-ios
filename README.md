@@ -26,6 +26,18 @@ open ChiakiRemote.xcodeproj
 - `Shared/` — 두 앱이 같이 쓰는 SwiftUI 코드 (`import ChiakiCore`)
 - `iOS/`, `macOS/` — 플랫폼별 구현 (`PlatformSupport.swift`에 같은 이름의 API를 맞춘다)
 
+## 데이터와 iCloud 동기화
+
+| 데이터 | 저장소 | 공유 |
+|---|---|---|
+| 등록 키 (regist key, rp_key) | iCloud 키체인 (`ChiakiRemote.registration`) | iPhone/iPad/Mac |
+| PS5 목록, PSN 계정 ID | iCloud 키-값 저장소 + UserDefaults | iPhone/iPad/Mac |
+| 영상 설정 | UserDefaults | 기기별 |
+
+등록은 기기에 묶이지 않아서 한 기기에서 등록하면 나머지 기기도 그대로 접속한다.
+등록 키 동기화에는 각 기기에서 iCloud 키체인(암호 및 키체인)이 켜져 있어야 한다.
+디버그 빌드는 `Chiaki.app/Contents/MacOS/Chiaki -cloudSelfTest`로 동작을 확인할 수 있다.
+
 ## 키보드 배치 (Mac, iPad 하드웨어 키보드)
 
 | 키 | PS5 |
