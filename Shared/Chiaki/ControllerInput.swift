@@ -1,5 +1,6 @@
 import ChiakiCore
 import GameController
+import os
 
 /// 게임패드(DualSense/DualShock 4/MFi)와 키보드 입력을 합쳐 ChiakiControllerState로 넘긴다.
 final class ControllerInput {
@@ -11,6 +12,9 @@ final class ControllerInput {
 	private var padState = ChiakiControllerState()
 	private var touchIDs: [Int8?] = [nil, nil]
 	private var pressedKeys: Set<GCKeyCode> = []
+	private var homePressed = false
+	private var tappedButtons: UInt32 = 0
+	private static let log = Logger(subsystem: "ChiakiRemote", category: "input")
 
 	// PS5 터치패드 좌표 범위
 	private static let touchpadWidth: Float = 1919
@@ -45,7 +49,19 @@ final class ControllerInput {
 		var keys = keyboardState()
 		var out = ChiakiControllerState()
 		chiaki_controller_state_or(&out, &padState, &keys)
+		out.buttons |= tappedButtons
 		onChange?(out)
+	}
+
+	/// 화면 버튼 등에서 버튼을 잠깐 눌렀다 뗀다
+	func tap(_ button: ChiakiControllerButton, duration: TimeInterval = 0.15) {
+		tappedButtons |= button.rawValue
+		publish()
+		DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+			guard let self else { return }
+			self.tappedButtons &= ~button.rawValue
+			self.publish()
+		}
 	}
 
 	// MARK: - 게임패드
@@ -59,8 +75,13 @@ final class ControllerInput {
 
 		guard let pad = newController?.extendedGamepad else { return }
 		// PS 버튼과 만들기(공유) 버튼을 OS가 가로채지 않고 PS5로 보내게 한다
-		pad.buttonHome?.preferredSystemGestureState = .disabled
-		pad.buttonOptions?.preferredSystemGestureState = .disabled
+		// physicalInputProfile 쪽 요소에도 같이 건다 (Apple 문서가 안내하는 경로)
+		let profileButtons = newController?.physicalInputProfile.buttons
+		for element in [pad.buttonHome, pad.buttonOptions, profileButtons?[GCInputButtonHome], profileButtons?[GCInputButtonShare]] {
+			element?.preferredSystemGestureState = .disabled
+		}
+		let home = profileButtons?[GCInputButtonHome] ?? pad.buttonHome
+		Self.log.notice("controller \(newController?.vendorName ?? "?", privacy: .public) (\(newController?.productCategory ?? "?", privacy: .public)): home=\(home != nil, privacy: .public) boundToSystem=\(home?.isBoundToSystemGesture ?? false, privacy: .public) gesture=\(home?.preferredSystemGestureState.rawValue ?? -1, privacy: .public)")
 		pad.valueChangedHandler = { [weak self] pad, _ in
 			self?.update(from: pad)
 			self?.publish()
@@ -89,6 +110,10 @@ final class ControllerInput {
 		map(pad.buttonMenu, CHIAKI_CONTROLLER_BUTTON_OPTIONS)
 		map(pad.buttonOptions, CHIAKI_CONTROLLER_BUTTON_SHARE)
 		map(pad.buttonHome, CHIAKI_CONTROLLER_BUTTON_PS)
+		if (pad.buttonHome?.isPressed ?? false) != homePressed {
+			homePressed.toggle()
+			Self.log.notice("PS button \(self.homePressed ? "down" : "up", privacy: .public)")
+		}
 
 		padState.l2_state = UInt8(pad.leftTrigger.value * 255)
 		padState.r2_state = UInt8(pad.rightTrigger.value * 255)
@@ -106,6 +131,12 @@ final class ControllerInput {
 			map(dualShock.touchpadButton, CHIAKI_CONTROLLER_BUTTON_TOUCHPAD)
 			updateTouch(0, dualShock.touchpadPrimary)
 			updateTouch(1, dualShock.touchpadSecondary)
+		}
+		// macOS 26은 PS(홈) 버튼을 앱보다 먼저 가져가 게임 센터를 띄운다.
+		// 대신 터치패드 + OPTIONS를 같이 누르면 PS 버튼으로 보낸다.
+		let psCombo = CHIAKI_CONTROLLER_BUTTON_TOUCHPAD.rawValue | CHIAKI_CONTROLLER_BUTTON_OPTIONS.rawValue
+		if buttons & psCombo == psCombo {
+			buttons = buttons & ~psCombo | CHIAKI_CONTROLLER_BUTTON_PS.rawValue
 		}
 		padState.buttons = buttons
 	}

@@ -81,6 +81,7 @@ targets:
         CFBundleDisplayName: Chiaki
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # 게임 분류여야 전체 화면에서 게임 모드(블루투스 컨트롤러 지연 감소)가 켜진다
         LSApplicationCategoryType: public.app-category.games
         NSLocalNetworkUsageDescription: PS5에 접속하고 상태를 확인하려면 로컬 네트워크 접근이 필요합니다.
         GCSupportsControllerUserInteraction: true

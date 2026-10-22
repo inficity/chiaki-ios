@@ -104,6 +104,11 @@ final class StreamSession: Identifiable {
 		}
 	}
 
+	/// 화면의 PS 버튼. macOS가 패드의 PS 버튼을 가져갈 때 대신 쓴다.
+	func pressPS() {
+		input.tap(CHIAKI_CONTROLLER_BUTTON_PS)
+	}
+
 	func submitLoginPIN(_ pin: String) {
 		let bytes = Array(pin.utf8)
 		_ = chiaki_session_set_login_pin(session, bytes, bytes.count)

@@ -20,14 +20,19 @@ struct StreamView: View {
 		}
 		.overlay(alignment: .topTrailing) {
 			if showsControls {
-				Button {
-					session.stop()
-					onClose()
-				} label: {
-					Image(systemName: "xmark")
-						.font(.headline)
-						.padding(12)
-						.background(.ultraThinMaterial, in: Circle())
+				HStack(spacing: 12) {
+					if session.state == .streaming {
+						// macOS가 패드의 PS 버튼을 가져갈 때를 위한 대체 버튼
+						controlButton("playstation.logo") {
+							session.pressPS()
+							revealControls()
+						}
+						.help("PS 버튼 (패드: 터치패드 + OPTIONS)")
+					}
+					controlButton("xmark") {
+						session.stop()
+						onClose()
+					}
 				}
 				.padding()
 				.transition(.opacity)
@@ -98,6 +103,17 @@ struct StreamView: View {
 		Binding {
 			if case .loginPIN = session.state { true } else { false }
 		} set: { _ in }
+	}
+
+	private func controlButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+		Button(action: action) {
+			Image(systemName: symbol)
+				.font(.headline)
+				.frame(width: 20, height: 20)
+				.padding(12)
+				.background(.ultraThinMaterial, in: Circle())
+		}
+		.buttonStyle(.plain)
 	}
 
 	/// 화면을 탭하면 닫기 버튼을 잠깐 보여준다
