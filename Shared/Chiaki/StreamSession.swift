@@ -1,6 +1,35 @@
 import ChiakiCore
 import Foundation
 import Observation
+import os
+
+/// 1초마다 갱신하는 스트리밍 품질 수치
+struct StreamStats: Equatable {
+	/// 받은 영상 프레임 수 (초당)
+	var fps = 0
+	/// libchiaki가 복구하지 못하고 버린 프레임 수 (지난 1초)
+	var framesLost = 0
+	/// 프레임 사이 최대 간격(ms). 60fps면 정상 17ms 안팎, 크면 화면이 멈칫한다
+	var maxGapMs = 0
+	var bitrateMbps = 0.0
+	/// 혼잡 제어가 계산한 패킷 손실률(%)
+	var packetLossPercent = 0.0
+	var rttMs = 0.0
+	var mtuIn = 0
+	var mtuOut = 0
+	/// 오디오 버퍼가 비어서 끊긴 횟수 (지난 1초)
+	var audioUnderruns = 0
+	/// 오디오가 밀려서 버린 양(ms, 지난 1초)
+	var audioDroppedMs = 0
+}
+
+/// 영상 콜백 스레드에서 세는 값
+private struct VideoCounters {
+	var frames = 0
+	var lost = 0
+	var maxGapNs: UInt64 = 0
+	var lastFrameNs: UInt64 = 0
+}
 
 /// ChiakiSession 하나(PS5와의 스트리밍 연결 1회)를 감싼다.
 /// libchiaki 콜백은 각자의 스레드에서 오고, UI 상태는 메인 스레드에서만 바꾼다.
@@ -16,7 +45,11 @@ final class StreamSession: Identifiable {
 	}
 
 	private(set) var state: State = .connecting
+	/// 스트리밍 중 1초마다 갱신
+	private(set) var stats: StreamStats?
 	let hostName: String
+	@ObservationIgnored private let counters = OSAllocatedUnfairLock(initialState: VideoCounters())
+	@ObservationIgnored private var statsTask: Task<Void, Never>?
 
 	@ObservationIgnored let video: VideoRenderer
 	@ObservationIgnored private let audio = AudioPlayer()
@@ -71,9 +104,10 @@ final class StreamSession: Identifiable {
 			Unmanaged<StreamSession>.fromOpaque(user).takeUnretainedValue().handle(event.pointee)
 		}, ctx)
 
-		chiaki_session_set_video_sample_cb(session, { buf, size, _, _, user in
+		chiaki_session_set_video_sample_cb(session, { buf, size, framesLost, _, user in
 			guard let buf, let user else { return false }
 			let me = Unmanaged<StreamSession>.fromOpaque(user).takeUnretainedValue()
+			me.countFrame(lost: Int(framesLost))
 			return me.video.submit(UnsafeBufferPointer(start: buf, count: size))
 		}, ctx)
 		video.onNeedsKeyframe = { [session] in _ = chiaki_session_request_idr(session) }
@@ -127,6 +161,8 @@ final class StreamSession: Identifiable {
 		// 세션 메모리를 해제하기 전에 입력이 더 들어가지 않게 끊는다
 		input.onChange = nil
 		input.stop()
+		statsTask?.cancel()
+		statsTask = nil
 		let started = retainedSelf
 		retainedSelf = nil
 		let session = session
@@ -145,6 +181,52 @@ final class StreamSession: Identifiable {
 		}
 	}
 
+	// MARK: - 통계
+
+	/// 영상 콜백 스레드에서 프레임마다
+	private func countFrame(lost: Int) {
+		let now = DispatchTime.now().uptimeNanoseconds
+		counters.withLock { c in
+			c.frames += 1
+			c.lost += lost
+			if c.lastFrameNs > 0 { c.maxGapNs = max(c.maxGapNs, now - c.lastFrameNs) }
+			c.lastFrameNs = now
+		}
+	}
+
+	private func startStats() {
+		statsTask = Task { @MainActor [weak self] in
+			while !Task.isCancelled {
+				try? await Task.sleep(for: .seconds(1))
+				guard let self, !self.stopped else { return }
+				self.sampleStats()
+			}
+		}
+	}
+
+	/// 메인 스레드에서 1초마다. 세션 필드는 chiaki 스레드가 쓰는 값을 그대로 읽는다 (데스크톱 GUI와 같은 방식).
+	private func sampleStats() {
+		let videoStats = counters.withLock { c -> VideoCounters in
+			let snapshot = c
+			c.frames = 0
+			c.lost = 0
+			c.maxGapNs = 0
+			return snapshot
+		}
+		let audioStats = audio.takeStats()
+		stats = StreamStats(
+			fps: videoStats.frames,
+			framesLost: videoStats.lost,
+			maxGapMs: Int(videoStats.maxGapNs / 1_000_000),
+			bitrateMbps: session.pointee.stream_connection.measured_bitrate,
+			packetLossPercent: session.pointee.stream_connection.congestion_control.packet_loss * 100,
+			rttMs: Double(session.pointee.rtt_us) / 1000,
+			mtuIn: Int(session.pointee.mtu_in),
+			mtuOut: Int(session.pointee.mtu_out),
+			audioUnderruns: audioStats.underruns,
+			audioDroppedMs: audioStats.droppedMs)
+	}
+
 	/// chiaki 세션 스레드에서 호출된다
 	private func handle(_ event: ChiakiEvent) {
 		switch event.type {
@@ -153,6 +235,7 @@ final class StreamSession: Identifiable {
 				guard !self.stopped else { return }
 				self.state = .streaming
 				self.input.start()
+				self.startStats()
 			}
 		case CHIAKI_EVENT_LOGIN_PIN_REQUEST:
 			let incorrect = event.login_pin_request.pin_incorrect

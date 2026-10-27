@@ -13,9 +13,12 @@ extension View {
 
 	func inlineNavigationTitle() -> some View { navigationBarTitleDisplayMode(.inline) }
 
-	/// 스트리밍 중에는 상태 막대와 홈 인디케이터를 숨긴다
+	/// 스트리밍 중에는 상태 막대와 홈 인디케이터를 숨긴다.
+	/// 화면 가장자리 스와이프는 한 번 양보받아서(두 번째 스와이프에 동작) 가장자리 근처 버튼 터치를 시스템이 빼앗지 않게 한다.
 	func immersiveStream() -> some View {
-		statusBarHidden().persistentSystemOverlays(.hidden)
+		statusBarHidden()
+			.persistentSystemOverlays(.hidden)
+			.defersSystemGestures(on: .all)
 	}
 
 	func streamPresenter<Item: Identifiable, Content: View>(

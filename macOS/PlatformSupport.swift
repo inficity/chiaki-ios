@@ -35,7 +35,7 @@ enum PlatformFeatures {
 
 /// 맥에는 화면 터치 패드가 없다 (iOS/TouchControls.swift와 같은 이름)
 struct TouchControlsView: View {
-	init(session: StreamSession) {}
+	init(session: StreamSession, onMenu: @escaping () -> Void) {}
 	var body: some View { EmptyView() }
 }
 

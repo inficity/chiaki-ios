@@ -7,6 +7,7 @@ final class AudioPlayer {
 	private let engine = AVAudioEngine()
 	private var ring: PCMRing?
 	private var source: AVAudioSourceNode?
+	private var sampleRate = 48_000.0
 
 	/// chiaki 오디오 스레드에서 스트림 형식이 정해지면 호출된다.
 	func configure(channels: Int, rate: Double) {
@@ -35,6 +36,13 @@ final class AudioPlayer {
 		}
 		self.ring = ring
 		self.source = source
+		sampleRate = rate
+	}
+
+	/// 지난번 호출 이후 버퍼가 비어 끊긴 횟수와, 밀려서 버린 양(ms)
+	func takeStats() -> (underruns: Int, droppedMs: Int) {
+		guard let (underruns, dropped) = ring?.takeStats() else { return (0, 0) }
+		return (underruns, Int(Double(dropped) / sampleRate * 1000))
 	}
 
 	/// samples: 채널이 섞인(interleaved) PCM, frames: 채널당 샘플 수
@@ -62,6 +70,8 @@ private final class PCMRing {
 	private var count = 0
 	/// 처음엔 목표량이 찰 때까지 무음을 낸다 (시작 직후 끊김 방지)
 	private var primed = false
+	private var underruns = 0
+	private var droppedFrames = 0
 
 	init(channels: Int, capacityFrames: Int, targetFrames: Int, maxFrames: Int) {
 		self.channels = channels
@@ -81,14 +91,24 @@ private final class PCMRing {
 		os_unfair_lock_lock(lock)
 		defer { os_unfair_lock_unlock(lock) }
 		for f in 0..<frames {
-			if count == capacity { drop(1) }
+			if count == capacity { drop(1); droppedFrames += 1 }
 			let pos = (readPos + count) % capacity
 			for c in 0..<channels {
 				storage[pos * channels + c] = samples[f * channels + c]
 			}
 			count += 1
 		}
-		if count > max { drop(count - target) }
+		if count > max {
+			droppedFrames += count - target
+			drop(count - target)
+		}
+	}
+
+	func takeStats() -> (Int, Int) {
+		os_unfair_lock_lock(lock)
+		defer { os_unfair_lock_unlock(lock) }
+		defer { underruns = 0; droppedFrames = 0 }
+		return (underruns, droppedFrames)
 	}
 
 	func read(into buffers: UnsafeMutableAudioBufferListPointer, frames: Int) {
@@ -106,7 +126,11 @@ private final class PCMRing {
 				count -= 1
 			}
 		}
-		if count == 0 { primed = false }
+		if count == 0 && primed {
+			// 재생 중에 버퍼가 비었다: 네트워크로 오디오가 늦게 왔다
+			primed = false
+			underruns += 1
+		}
 	}
 
 	private func drop(_ frames: Int) {
