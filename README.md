@@ -66,7 +66,7 @@ macOS 26은 컨트롤러의 PS(홈) 버튼을 앱보다 먼저 가져가 게임 
 
 ## 라이선스
 
-[GNU AGPL-3.0](LICENSE) (OpenSSL 링크 예외 포함). chiaki-ng의 libchiaki를 링크하므로 같은 라이선스를 따른다.
+[GNU AGPL-3.0](LICENSE)에 [OpenSSL 링크 예외](LICENSE-OpenSSL-exception)를 더한 조건이다. chiaki-ng의 libchiaki를 링크하므로 같은 라이선스를 따른다.
 App Store 배포 대상이 아니며 개인 기기 설치용이다. 빌드한 앱을 다른 사람에게 배포하면 AGPL에 따라 소스도 함께 제공해야 한다.
 
 함께 쓰는 서드파티 코드 (빌드할 때 받거나 서브모듈로 가져오며, 각자의 라이선스를 따른다):
