@@ -1,7 +1,14 @@
 # ChiakiRemote
 
+A personal PS5 Remote Play client for iPhone, iPad and Mac, built on
+[chiaki-ng](https://github.com/streetpea/chiaki-ng)'s libchiaki. It connects directly to the console's LAN IP
+(for example through a Tailscale subnet router) and is not affiliated with Sony.
+
 [chiaki-ng](https://github.com/streetpea/chiaki-ng)의 libchiaki를 쓰는 iPhone/iPad/Mac용 PS5 리모트 플레이 앱.
 Tailscale subnet router 너머의 PS5 LAN IP로 직접 접속하는 환경을 전제로 한다.
+
+> 비공식 프로젝트로 Sony Interactive Entertainment와 관계가 없다.
+> PlayStation, PS5, DualSense는 Sony Interactive Entertainment의 상표다.
 
 ## 빌드
 
@@ -59,4 +66,18 @@ macOS 26은 컨트롤러의 PS(홈) 버튼을 앱보다 먼저 가져가 게임 
 
 ## 라이선스
 
-chiaki-ng가 AGPL-3.0이므로 이 앱도 AGPL-3.0을 따른다. App Store 배포 대상이 아니며 개인 기기 설치용.
+[GNU AGPL-3.0](LICENSE) (OpenSSL 링크 예외 포함). chiaki-ng의 libchiaki를 링크하므로 같은 라이선스를 따른다.
+App Store 배포 대상이 아니며 개인 기기 설치용이다. 빌드한 앱을 다른 사람에게 배포하면 AGPL에 따라 소스도 함께 제공해야 한다.
+
+함께 쓰는 서드파티 코드 (빌드할 때 받거나 서브모듈로 가져오며, 각자의 라이선스를 따른다):
+
+| 구성 요소 | 라이선스 | 위치 |
+|---|---|---|
+| [chiaki-ng](https://github.com/streetpea/chiaki-ng) (libchiaki) | AGPL-3.0 + OpenSSL 예외 | `third_party/chiaki-ng` |
+| [OpenSSL](https://www.openssl.org) 3.5 (libcrypto) | Apache-2.0 | `scripts/build-deps.sh`가 받음 |
+| [Opus](https://opus-codec.org) 1.5 | BSD-3-Clause | `scripts/build-deps.sh`가 받음 |
+| [nanopb](https://github.com/nanopb/nanopb) | zlib | chiaki-ng 서브모듈 |
+| [Jerasure](https://github.com/tsuraan/Jerasure), [GF-Complete](https://github.com/ceph/gf-complete) | BSD-3-Clause | chiaki-ng 서브모듈 |
+
+`ChiakiCore/generated/takion.pb.{c,h}`는 chiaki-ng의 `takion.proto`에서 nanopb로 생성했다.
+앱 아이콘은 이 저장소용으로 생성한 이미지다 (`Design/icon-candidates/`).
