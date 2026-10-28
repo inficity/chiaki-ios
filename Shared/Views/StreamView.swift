@@ -9,6 +9,8 @@ struct StreamView: View {
 	@State private var showsControls = true
 	@State private var hideTask: Task<Void, Never>?
 	@State private var loginPIN = ""
+	@State private var confirmingClose = false
+	@State private var sleeping = false
 	/// 화면 터치 패드: 처음엔 연결된 컨트롤러가 없을 때만 보인다
 	@State private var showsTouchControls = PlatformFeatures.touchControls && GCController.controllers().isEmpty
 	@AppStorage("showStreamStats") private var showsStats = false
@@ -62,8 +64,24 @@ struct StreamView: View {
 						.help("PS 버튼 (패드: 터치패드 + OPTIONS)")
 					}
 					controlButton("xmark") {
-						session.stop()
-						onClose()
+						// 스트리밍 중이면 PS5를 그대로 둘지 휴식 모드로 보낼지 고른다
+						if session.state == .streaming {
+							confirmingClose = true
+						} else {
+							session.stop()
+							onClose()
+						}
+					}
+					.confirmationDialog("스트리밍 종료", isPresented: $confirmingClose, titleVisibility: .visible) {
+						Button("PS5 휴식 모드로 보내고 종료") {
+							sleeping = true
+							session.sleepConsoleAndStop { onClose() }
+						}
+						Button("연결만 끊기") {
+							session.stop()
+							onClose()
+						}
+						Button("취소", role: .cancel) {}
 					}
 				}
 				.padding()
@@ -110,13 +128,18 @@ struct StreamView: View {
 
 	@ViewBuilder
 	private var overlay: some View {
+		if sleeping {
+			progress("\(session.hostName)을(를) 휴식 모드로 보내는 중…")
+		} else {
+			stateOverlay
+		}
+	}
+
+	@ViewBuilder
+	private var stateOverlay: some View {
 		switch session.state {
 		case .connecting, .loginPIN:
-			VStack(spacing: 12) {
-				ProgressView().controlSize(.large)
-				Text("\(session.hostName)에 연결하는 중…")
-			}
-			.foregroundStyle(.white)
+			progress("\(session.hostName)에 연결하는 중…")
 		case .ended(let message?):
 			VStack(spacing: 16) {
 				Image(systemName: "exclamationmark.triangle.fill")
@@ -136,6 +159,14 @@ struct StreamView: View {
 		case .streaming, .ended:
 			EmptyView()
 		}
+	}
+
+	private func progress(_ text: String) -> some View {
+		VStack(spacing: 12) {
+			ProgressView().controlSize(.large)
+			Text(text)
+		}
+		.foregroundStyle(.white)
 	}
 
 	private var touchControlsVisible: Bool {

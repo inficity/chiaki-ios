@@ -154,6 +154,21 @@ final class StreamSession: Identifiable {
 		state = .connecting
 	}
 
+	/// PS5를 휴식 모드로 보내고 세션을 끝낸다.
+	/// 휴식 명령은 ctrl 스레드가 큐에서 꺼내 보내므로, 보낼 시간을 조금 준 뒤에 끊는다.
+	func sleepConsoleAndStop(completion: @escaping () -> Void) {
+		guard !stopped, state == .streaming else {
+			stop()
+			completion()
+			return
+		}
+		_ = chiaki_session_goto_bed(session)
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+			self.stop()
+			completion()
+		}
+	}
+
 	/// 세션을 끝내고 자원을 정리한다. 여러 번 불러도 된다.
 	func stop() {
 		guard !stopped else { return }
