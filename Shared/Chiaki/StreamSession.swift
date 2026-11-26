@@ -21,6 +21,8 @@ struct StreamStats: Equatable {
 	var audioUnderruns = 0
 	/// 오디오가 밀려서 버린 양(ms, 지난 1초)
 	var audioDroppedMs = 0
+	/// 너무 짧게 눌려서 최소 누름 시간을 채워 보낸 버튼 입력 수 (지난 1초)
+	var shortTaps = 0
 }
 
 /// 영상 콜백 스레드에서 세는 값
@@ -239,7 +241,8 @@ final class StreamSession: Identifiable {
 			mtuIn: Int(session.pointee.mtu_in),
 			mtuOut: Int(session.pointee.mtu_out),
 			audioUnderruns: audioStats.underruns,
-			audioDroppedMs: audioStats.droppedMs)
+			audioDroppedMs: audioStats.droppedMs,
+			shortTaps: input.takeShortTapCount())
 	}
 
 	/// chiaki 세션 스레드에서 호출된다

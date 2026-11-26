@@ -221,6 +221,9 @@ private struct StatsOverlay: View {
 				item("오디오 끊김 \(stats.audioUnderruns) · 버림 \(stats.audioDroppedMs) ms",
 				     warn: stats.audioUnderruns > 0 || stats.audioDroppedMs > 0)
 			}
+			if stats.shortTaps > 0 {
+				item("짧은 입력 보정 \(stats.shortTaps)")
+			}
 		}
 		.font(.caption2.monospacedDigit().weight(.medium))
 		.padding(.horizontal, 10)

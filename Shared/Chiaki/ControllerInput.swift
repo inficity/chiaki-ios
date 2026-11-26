@@ -60,8 +60,63 @@ final class ControllerInput {
 		attachKeyboard(nil)
 	}
 
+	// MARK: - 최소 누름 시간
+
+	/// 버튼을 이보다 짧게 누르면 뗌을 늦춰서 보낸다.
+	/// libchiaki는 버튼을 눌림/뗌 이벤트로만 보내서, 아주 짧은 탭은 눌림과 뗌이 PS5의 한 프레임 안에 들어가
+	/// 게임이 버튼 상태를 읽을 때 놓친다. 60fps 기준 3프레임.
+	static let minimumHold: TimeInterval = 0.05
+
+	private var lastRawButtons: UInt32 = 0
+	private var pressStarts: [UInt32: TimeInterval] = [:]
+	private var holdRepublish: DispatchWorkItem?
+	/// 최소 시간을 채우려고 뗌을 늦춘 횟수 (통계용)
+	private var shortTaps = 0
+
+	/// 지난번 호출 이후 짧은 입력을 보정한 횟수
+	func takeShortTapCount() -> Int {
+		defer { shortTaps = 0 }
+		return shortTaps
+	}
+
 	private func publish() {
-		onChange?(mergedState())
+		var state = mergedState()
+		state.buttons = applyMinimumHold(state.buttons, now: ProcessInfo.processInfo.systemUptime)
+		onChange?(state)
+	}
+
+	/// 막 떼졌지만 최소 시간이 안 된 버튼은 눌린 채로 두고, 시간이 차면 다시 보낸다
+	func applyMinimumHold(_ raw: UInt32, now: TimeInterval) -> UInt32 {
+		for bit in Self.bits(raw & ~lastRawButtons) { pressStarts[bit] = now }
+		for bit in Self.bits(lastRawButtons & ~raw) where now - (pressStarts[bit] ?? 0) < Self.minimumHold {
+			shortTaps += 1
+		}
+		lastRawButtons = raw
+
+		var held: UInt32 = 0
+		var nextRelease = TimeInterval.infinity
+		for (bit, start) in pressStarts where raw & bit == 0 {
+			let releaseAt = start + Self.minimumHold
+			if now < releaseAt {
+				held |= bit
+				nextRelease = min(nextRelease, releaseAt)
+			} else {
+				pressStarts[bit] = nil
+			}
+		}
+
+		holdRepublish?.cancel()
+		holdRepublish = nil
+		if held != 0 {
+			let work = DispatchWorkItem { [weak self] in self?.publish() }
+			holdRepublish = work
+			DispatchQueue.main.asyncAfter(deadline: .now() + (nextRelease - now), execute: work)
+		}
+		return raw | held
+	}
+
+	private static func bits(_ mask: UInt32) -> [UInt32] {
+		(0..<32).map { UInt32(1) << $0 }.filter { mask & $0 != 0 }
 	}
 
 	/// 지금 PS5로 보낼 합쳐진 상태
@@ -97,10 +152,16 @@ final class ControllerInput {
 
 	// MARK: - 게임패드
 
+	/// 실제 패드에서 눌린 버튼 (PS 대체 조합 적용 전)
+	private var padButtons: UInt32 = 0
+
 	private func attach(_ newController: GCController?) {
-		controller?.extendedGamepad?.valueChangedHandler = nil
+		// 같은 패드가 다시 current가 되는 알림은 무시한다. 상태를 비우면 누르고 있던 버튼이 떼진다.
+		guard newController !== controller else { return }
+		detachHandlers()
 		controller = newController
 		chiaki_controller_state_set_idle(&padState)
+		padButtons = 0
 		touchIDs = [nil, nil]
 		publish()
 
@@ -113,69 +174,127 @@ final class ControllerInput {
 		}
 		let home = profileButtons?[GCInputButtonHome] ?? pad.buttonHome
 		Self.log.notice("controller \(newController?.vendorName ?? "?", privacy: .public) (\(newController?.productCategory ?? "?", privacy: .public)): home=\(home != nil, privacy: .public) boundToSystem=\(home?.isBoundToSystemGesture ?? false, privacy: .public) gesture=\(home?.preferredSystemGestureState.rawValue ?? -1, privacy: .public)")
-		pad.valueChangedHandler = { [weak self] pad, _ in
-			self?.update(from: pad)
-			self?.publish()
-		}
-		update(from: pad)
+
+		installHandlers(pad)
 		publish()
 	}
 
-	private func update(from pad: GCExtendedGamepad) {
-		var buttons: UInt32 = 0
-		func map(_ input: GCControllerButtonInput?, _ button: ChiakiControllerButton) {
-			if input?.isPressed == true { buttons |= button.rawValue }
+	private func buttonBindings(_ pad: GCExtendedGamepad) -> [(GCControllerButtonInput?, ChiakiControllerButton)] {
+		var bindings: [(GCControllerButtonInput?, ChiakiControllerButton)] = [
+			(pad.buttonA, CHIAKI_CONTROLLER_BUTTON_CROSS),
+			(pad.buttonB, CHIAKI_CONTROLLER_BUTTON_MOON),
+			(pad.buttonX, CHIAKI_CONTROLLER_BUTTON_BOX),
+			(pad.buttonY, CHIAKI_CONTROLLER_BUTTON_PYRAMID),
+			(pad.dpad.left, CHIAKI_CONTROLLER_BUTTON_DPAD_LEFT),
+			(pad.dpad.right, CHIAKI_CONTROLLER_BUTTON_DPAD_RIGHT),
+			(pad.dpad.up, CHIAKI_CONTROLLER_BUTTON_DPAD_UP),
+			(pad.dpad.down, CHIAKI_CONTROLLER_BUTTON_DPAD_DOWN),
+			(pad.leftShoulder, CHIAKI_CONTROLLER_BUTTON_L1),
+			(pad.rightShoulder, CHIAKI_CONTROLLER_BUTTON_R1),
+			(pad.leftThumbstickButton, CHIAKI_CONTROLLER_BUTTON_L3),
+			(pad.rightThumbstickButton, CHIAKI_CONTROLLER_BUTTON_R3),
+			(pad.buttonMenu, CHIAKI_CONTROLLER_BUTTON_OPTIONS),
+			(pad.buttonOptions, CHIAKI_CONTROLLER_BUTTON_SHARE),
+			(pad.buttonHome, CHIAKI_CONTROLLER_BUTTON_PS),
+		]
+		if let dualSense = pad as? GCDualSenseGamepad {
+			bindings.append((dualSense.touchpadButton, CHIAKI_CONTROLLER_BUTTON_TOUCHPAD))
+		} else if let dualShock = pad as? GCDualShockGamepad {
+			bindings.append((dualShock.touchpadButton, CHIAKI_CONTROLLER_BUTTON_TOUCHPAD))
 		}
-		map(pad.buttonA, CHIAKI_CONTROLLER_BUTTON_CROSS)
-		map(pad.buttonB, CHIAKI_CONTROLLER_BUTTON_MOON)
-		map(pad.buttonX, CHIAKI_CONTROLLER_BUTTON_BOX)
-		map(pad.buttonY, CHIAKI_CONTROLLER_BUTTON_PYRAMID)
-		map(pad.dpad.left, CHIAKI_CONTROLLER_BUTTON_DPAD_LEFT)
-		map(pad.dpad.right, CHIAKI_CONTROLLER_BUTTON_DPAD_RIGHT)
-		map(pad.dpad.up, CHIAKI_CONTROLLER_BUTTON_DPAD_UP)
-		map(pad.dpad.down, CHIAKI_CONTROLLER_BUTTON_DPAD_DOWN)
-		map(pad.leftShoulder, CHIAKI_CONTROLLER_BUTTON_L1)
-		map(pad.rightShoulder, CHIAKI_CONTROLLER_BUTTON_R1)
-		map(pad.leftThumbstickButton, CHIAKI_CONTROLLER_BUTTON_L3)
-		map(pad.rightThumbstickButton, CHIAKI_CONTROLLER_BUTTON_R3)
-		map(pad.buttonMenu, CHIAKI_CONTROLLER_BUTTON_OPTIONS)
-		map(pad.buttonOptions, CHIAKI_CONTROLLER_BUTTON_SHARE)
-		map(pad.buttonHome, CHIAKI_CONTROLLER_BUTTON_PS)
-		if (pad.buttonHome?.isPressed ?? false) != homePressed {
-			homePressed.toggle()
-			Self.log.notice("PS button \(self.homePressed ? "down" : "up", privacy: .public)")
+		return bindings
+	}
+
+	private func touchpads(_ pad: GCExtendedGamepad) -> [GCControllerDirectionPad] {
+		if let dualSense = pad as? GCDualSenseGamepad { return [dualSense.touchpadPrimary, dualSense.touchpadSecondary] }
+		if let dualShock = pad as? GCDualShockGamepad { return [dualShock.touchpadPrimary, dualShock.touchpadSecondary] }
+		return []
+	}
+
+	/// 요소마다 핸들러를 건다. 핸들러가 받는 값(이벤트 시점의 값)으로 상태를 바꾼다.
+	/// 패드 전체 핸들러에서 현재 값을 다시 읽으면, 메인 스레드가 늦게 처리할 때 짧게 누른 버튼이
+	/// 눌림·뗌 두 이벤트 모두 '떼짐'으로 읽혀서 입력이 사라진다.
+	private func installHandlers(_ pad: GCExtendedGamepad) {
+		for (input, button) in buttonBindings(pad) {
+			if input?.isPressed == true { padButtons |= button.rawValue }
+			input?.pressedChangedHandler = { [weak self] _, _, pressed in
+				self?.setPadButton(button, pressed)
+			}
 		}
+		applyPadButtons()
 
 		padState.l2_state = UInt8(pad.leftTrigger.value * 255)
 		padState.r2_state = UInt8(pad.rightTrigger.value * 255)
-		// GameController는 위가 +, PS 입력은 아래가 +
-		padState.left_x = Self.axis(pad.leftThumbstick.xAxis.value)
-		padState.left_y = Self.axis(-pad.leftThumbstick.yAxis.value)
-		padState.right_x = Self.axis(pad.rightThumbstick.xAxis.value)
-		padState.right_y = Self.axis(-pad.rightThumbstick.yAxis.value)
+		pad.leftTrigger.valueChangedHandler = { [weak self] _, value, _ in
+			self?.padState.l2_state = UInt8(value * 255)
+			self?.publish()
+		}
+		pad.rightTrigger.valueChangedHandler = { [weak self] _, value, _ in
+			self?.padState.r2_state = UInt8(value * 255)
+			self?.publish()
+		}
 
-		if let dualSense = pad as? GCDualSenseGamepad {
-			map(dualSense.touchpadButton, CHIAKI_CONTROLLER_BUTTON_TOUCHPAD)
-			updateTouch(0, dualSense.touchpadPrimary)
-			updateTouch(1, dualSense.touchpadSecondary)
-		} else if let dualShock = pad as? GCDualShockGamepad {
-			map(dualShock.touchpadButton, CHIAKI_CONTROLLER_BUTTON_TOUCHPAD)
-			updateTouch(0, dualShock.touchpadPrimary)
-			updateTouch(1, dualShock.touchpadSecondary)
+		// GameController는 위가 +, PS 입력은 아래가 +
+		setStick(left: true, pad.leftThumbstick.xAxis.value, pad.leftThumbstick.yAxis.value)
+		setStick(left: false, pad.rightThumbstick.xAxis.value, pad.rightThumbstick.yAxis.value)
+		pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
+			self?.setStick(left: true, x, y)
+			self?.publish()
 		}
-		// macOS 26은 PS(홈) 버튼을 앱보다 먼저 가져가 게임 센터를 띄운다.
-		// 대신 터치패드 + OPTIONS를 같이 누르면 PS 버튼으로 보낸다.
+		pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
+			self?.setStick(left: false, x, y)
+			self?.publish()
+		}
+
+		for (slot, touchpad) in touchpads(pad).enumerated() {
+			touchpad.valueChangedHandler = { [weak self] _, x, y in
+				self?.updateTouch(slot, x, y)
+				self?.publish()
+			}
+		}
+	}
+
+	private func detachHandlers() {
+		guard let pad = controller?.extendedGamepad else { return }
+		for (input, _) in buttonBindings(pad) { input?.pressedChangedHandler = nil }
+		pad.leftTrigger.valueChangedHandler = nil
+		pad.rightTrigger.valueChangedHandler = nil
+		pad.leftThumbstick.valueChangedHandler = nil
+		pad.rightThumbstick.valueChangedHandler = nil
+		for touchpad in touchpads(pad) { touchpad.valueChangedHandler = nil }
+	}
+
+	private func setPadButton(_ button: ChiakiControllerButton, _ pressed: Bool) {
+		if pressed { padButtons |= button.rawValue } else { padButtons &= ~button.rawValue }
+		if button == CHIAKI_CONTROLLER_BUTTON_PS, pressed != homePressed {
+			homePressed = pressed
+			Self.log.notice("PS button \(pressed ? "down" : "up", privacy: .public)")
+		}
+		applyPadButtons()
+		publish()
+	}
+
+	/// macOS 26은 PS(홈) 버튼을 앱보다 먼저 가져가 게임 센터를 띄운다.
+	/// 대신 터치패드 + OPTIONS를 같이 누르면 PS 버튼으로 보낸다.
+	private func applyPadButtons() {
 		let psCombo = CHIAKI_CONTROLLER_BUTTON_TOUCHPAD.rawValue | CHIAKI_CONTROLLER_BUTTON_OPTIONS.rawValue
-		if buttons & psCombo == psCombo {
-			buttons = buttons & ~psCombo | CHIAKI_CONTROLLER_BUTTON_PS.rawValue
+		padState.buttons = padButtons & psCombo == psCombo
+			? padButtons & ~psCombo | CHIAKI_CONTROLLER_BUTTON_PS.rawValue
+			: padButtons
+	}
+
+	private func setStick(left: Bool, _ x: Float, _ y: Float) {
+		if left {
+			padState.left_x = Self.axis(x)
+			padState.left_y = Self.axis(-y)
+		} else {
+			padState.right_x = Self.axis(x)
+			padState.right_y = Self.axis(-y)
 		}
-		padState.buttons = buttons
 	}
 
 	/// 터치패드 손가락 하나. 손을 떼면 좌표가 (0, 0)으로 돌아온다.
-	private func updateTouch(_ slot: Int, _ pad: GCControllerDirectionPad) {
-		let x = pad.xAxis.value
-		let y = pad.yAxis.value
+	private func updateTouch(_ slot: Int, _ x: Float, _ y: Float) {
 		let touching = x != 0 || y != 0
 		let px = UInt16((x + 1) / 2 * Self.touchpadWidth)
 		let py = UInt16((1 - (y + 1) / 2) * Self.touchpadHeight)
